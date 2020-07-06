@@ -43,10 +43,10 @@ int hexfile_open(hex_file_s* file,char* fname){
 */
 int parse_hexline(hex_file_s* file, uint8_t* buff,long offset,uint8_t* parsed_len){
 	buff +=1;
-	uint8_t line_len;
+	uint8_t line_len=0;
 	uint8_t mem[16];
-	int res;
-	unsigned long  chr;
+	int res=0;
+	unsigned long chr=0;
 	//Read line byte count:
 	res = sscanf((char*)buff,"%2X",&chr);
 	buff+=2;
@@ -59,7 +59,7 @@ int parse_hexline(hex_file_s* file, uint8_t* buff,long offset,uint8_t* parsed_le
 	
 
 	//Read address:
-	uint16_t address;
+	uint16_t address=0;
 	res = sscanf((char*)buff,"%4X",&address);
 
 	file_printf(CLR_CANCEL,1,"INTEL_HEX: %2u bytes at %04X.\n",line_len,address);

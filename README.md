@@ -1,6 +1,6 @@
 Open Source Sparta ION
 =============
-There's a bunch of (Dutch) blog posts that go with this: (http://infant.tweakblogs.net/blog/cat/2875)
+There's a bunch of (Dutch) blog posts that go with this: (http://infant.tweakblogs.net/blog/cat/2875) (Awesome work InfantEudora)
 
 This repository contains the following:
 
@@ -16,10 +16,10 @@ All files in this repository are released under GNU GPLv3 (https://www.gnu.org/c
 
 Software used:
 ----------------
- - Atmel Studio 6.1.2440 - BETA (http://www.atmel.com/microsite/atmel_studio6/)
- - GCC 4.9.2
+ - Atmel Studio 7.0.2397 (https://www.microchip.com/mplab/avr-support/atmel-studio-7)
+ - GCC 9.3.0
  - Windows: Cygwin(https://cygwin.com/install.html)
- - Eagle 6.1.0 (http://www.cadsoftusa.com/)
+ - Eagle 8.6.3 (http://www.cadsoftusa.com/)
 
 Firmware:
 ----------------
@@ -35,6 +35,9 @@ The firware uses one block to read/write settings, which are currently the strai
 If you wan't to build a control PCB, use the latest revision of 3phasecntrl.
 
 New Hardare Revision Wishlist:
- - Crystal
- - ESD protection on HALL input. (REV2)
+ - Modify 3phasecntrl for XHP motors.
+ - Create NIMH BMS with BOW bus support.
+
+New Software Revision Wishlist:
+ - Support CU3 Display
 

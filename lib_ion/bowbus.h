@@ -210,6 +210,7 @@ void bus_display_poll(bowbus_net_s* bus);
 void bus_display_tick(bowbus_net_s* bus);
 void bus_display_buttonpress(bowbus_net_s* bus);
 bool bus_display_update(bowbus_net_s* bus);
+bool bus_cu3_display_update(bowbus_net_s* bus);
 void bus_display_clear_error(bowbus_net_s* bus);
 
 void bus_motor_poll(bowbus_net_s* bus);

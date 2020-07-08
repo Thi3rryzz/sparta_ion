@@ -203,7 +203,9 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 			//bus_display_buttonpress(bus);
 		}else if ((cmd == 0x26) && (data_len == 0x00)){//ACK to a display update message.
 			display.needs_update = false;
-		}
+		}else if ((cmd == 0x28) && (data_len == 0x01)){//ACK to a CU3 display update message.
+			display.needs_update = false;
+	}
 	}else if ((from == ADDR_BATTERY) && (to == ADDR_MOTOR)){
 		if ((cmd == 0x30) && (data_len == 0x04)){
 			//Data contains mode, throttle and speed.
@@ -820,6 +822,54 @@ bool bus_display_update(bowbus_net_s* bus){
 	//Send it out.
 	return bus_send(bus,msg,14);
 }
+
+bool bus_cu3_display_update(bowbus_net_s* bus){
+	//Three local variables for the different items on screen, they might get different data values based on menu.
+	int32_t distance = display.distance;
+	uint16_t speed = display.speed;
+	uint8_t soc = display.throttle;
+
+	//Decimal numbers
+	uint8_t dec[5] = {0};
+	//Bus message
+	uint8_t msg[18];
+	msg[0] = FRAME_HEADER;
+	msg[1] = ADDR_DISPLAY | 0x01;	 //Dunno what the one's for.
+	msg[2] = ADDR_BATTERY | 0x0D;	 //I guess that goes there.
+	msg[3] = 0x28;					 // CMD, 0x28 cause idk?
+	msg[4] = 0x00;					 // Charge state, >0 = busy display
+	msg[5] = motor.mode;			 // Peddal assist mode (0(0), 1(1), 2(2), 3(3), 7(4)  4(P),5(R))
+	
+	msg[6] = 0x0A;					 // ?? 0x0A works. Sometimes 0x0B sniffed, Maybe something with lights
+	msg[7] = (motor.speed>>8) & 0xFF;// MSB of speedometer
+	msg[8] = motor.speed & 0xFF;	 // LSB of speedometer
+	
+	msg[9] = 0x00;							//MSB Trip 1
+	msg[10] = 0x00;							// Trip dist 1
+	msg[11] = (display.voltage>>8) & 0xFF;  // Trip dist 1
+	msg[12] = display.voltage & 0xFF;		// LSB Trip 1
+	
+	msg[13] = 0x00;							// MSB Trip 2
+	msg[14] = 0x00;							// Trip dist 2
+	msg[15] = (display.current>>8) & 0xFF;  // Trip dist 2
+	msg[16] = display.current & 0xFF;		// LSB Trip 2
+	
+	//Computer the CRC:
+	uint8_t crc = crc8_bow(msg,17);
+	msg[17] = crc;
+
+	//Break the Speed into powers of 10.
+	//dec[0] = (speed / 100);
+	//dec[1] = (speed - (100*dec[0])) / 10;
+	//dec[2] = speed % 10;
+	//msg[10] = 0xf0 | (dec[0]);
+	//msg[11] = ((0x10 * dec[1])) | dec[2];
+	//msg[12] = ((0x10 * dec[3])) | dec[4];
+
+	//Send it out.
+	return bus_send(bus,msg,18);
+}
+
 
 //Message should be auto escaped when sending.
 //void bus_make_message(uint8_t to, uint8_t from, uint8_t cmd, uint8_t* data,uint8_t data_len, uint8_t* msg_out){}

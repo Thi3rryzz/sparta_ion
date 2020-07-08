@@ -30,9 +30,12 @@
 #define HW_BLDC_REV1		2		//Seconds BLDC controller with onboard Mosfets, Display
 #define HW_CTRL_REV1		3		//REV0 or REV1 -> Round board: Control only: talks directly to display.
 
+#define HW_DISP_ORIG		0
+#define HW_DISP_CU3			1
 
 //Set this to the version you have.
 #define HARDWARE_VER		HW_CTRL_REV1
+#define DISPLAY_VER			HW_DISP_CU3		//HW_DISP_ORIG
 
 //Define what peripherals this hardware supports.
 #if(HARDWARE_VER == HW_BLDC_REV0)

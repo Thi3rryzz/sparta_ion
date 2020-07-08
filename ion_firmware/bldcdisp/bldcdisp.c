@@ -1536,7 +1536,11 @@ int main(void){
 						motor.mode = 0;
 					}
 
-					bus_display_update(&bus);
+					#if(DISPLAY_VER == HW_DISP_CU3)
+						bus_cu3_display_update(&bus);
+					#else
+						bus_display_update(&bus);
+					#endif
 					#endif
 					//motor.mode = 1;
 				}

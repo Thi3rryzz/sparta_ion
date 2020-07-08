@@ -9,6 +9,7 @@
 				bowbus.h
 				
 		The BOW Bus works at 9600 BAUD.
+		-- CU3 Display also works at 19200 BAUD.
 		The UART rate is pretty unstable on internal RC clock, so there is a uart_rate_find
 		which adjusts the frequency slightly to compensate for clock/temperature variations.
 		The RX/TX ISR both provide character escaping, and syncing.

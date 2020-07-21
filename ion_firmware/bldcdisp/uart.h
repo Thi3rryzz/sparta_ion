@@ -45,8 +45,13 @@ void uart_rate_find(void);
 #define TXPIN_0				PIN3_bm
 
 //We don't want to try every frequency
-#define BSEL_MIN	200
-#define BSEL_MAX	220
+#if(DISPLAY_VER == HW_DISP_CU3)
+	#define BSEL_MIN	100
+	#define BSEL_MAX	106
+#else
+	#define BSEL_MIN	200
+	#define BSEL_MAX	220
+#endif
 
 //UART rate settings.
 uint8_t bscale;

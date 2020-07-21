@@ -76,6 +76,7 @@ void bus_init(bowbus_net_s* bus){
 	display.needs_update = false;
 	display.menu_timeout = 0 ;
 	display.road_legal = true;
+	display.calibrate = false;
 
 	wait_for_last_char = false;
 	display.function_val2 = 9;
@@ -203,8 +204,6 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 			//bus_display_buttonpress(bus);
 		}else if ((cmd == 0x26) && (data_len == 0x00)){//ACK to a display update message.
 			display.needs_update = false;
-		}else if ((cmd == 0x28) && (data_len == 0x01)){//ACK to a CU3 display update message.
-			display.needs_update = false;
 	}
 	}else if ((from == ADDR_BATTERY) && (to == ADDR_MOTOR)){
 		if ((cmd == 0x30) && (data_len == 0x04)){
@@ -265,14 +264,84 @@ bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 
 		//Handle different commands.
 		if ((cmd == 0x22) && (data_len == 0x02)){//ACK to display query.
-			//Update button state:
+			//Update button state (Should not appear with CU3):
 			display.button_state_prev = display.button_state;
 			display.button_state = _data[4] & (BUTT_MASK_TOP|BUTT_MASK_FRONT);
 			//Handle
 			bus_display_buttonpress(bus);
 		}else if ((cmd == 0x26) && (data_len == 0x00)){//ACK to a display update message.
 			display.needs_update = false;
+		}else if ((cmd == 0x28) && (data_len == 0x01)){//ACK to a CU3 display update message.
+			display.needs_update = false;	
+			bus_cu3_display_poll(bus);
+		}else if ((cmd == 0x1b) && (data_len == 0x01)){//Strain Calibration command received.
+			display.calibrate = true;
+		}else if ((cmd == 0x1c) && (data_len == 0x01)){//Light command received.
+		display.backlight = _data[4];
+		}else if ((cmd == 0x1d) && (data_len == 0x01) && motor.mode_needs_update == true){//Receive power level mode change
+			motor.mode_needs_update = false;
+			if(motor.mode >= 3 && motor.mode <= 6){
+				//Increase power level
+				if(_data[4] == 0x03 && motor.mode == 3){motor.mode = 4;}
+				else if(_data[4] == 0x07 && motor.mode == 4){motor.mode = 5;}
+				else if(_data[4] == 0x00 && motor.mode == 5){motor.mode = 6;}
+				else if(_data[4] == 0x04 && motor.mode == 6){motor.mode = 0;} //Exit by top end of menu
+				//Decrease power level
+				else if(_data[4] == 0x05 && motor.mode == 6){motor.mode = 5;}
+				else if(_data[4] == 0x04 && motor.mode == 5){motor.mode = 4;}
+				else if(_data[4] == 0x03 && motor.mode == 4){motor.mode = 3;}
+				else if(_data[4] == 0x02 && motor.mode == 3){motor.mode = 2;}
+			}else{motor.mode = _data[4];}
+		}else if ((cmd == 0x01) && (data_len == 0x00)){//IDK???
+			uint8_t msg[7] = {0x10, 0xc2, 0x22, 0x01, 0x02, 0x02, 0x03};
+			return bus_send(bus, msg, 7);
+		}else if ((cmd == 0x08) && (data_len == 0x02)){//Request for Time/TotalDist
+			// Total Dist/Time
+			if(_data[4] == 0x28){
+				uint8_t msg[12] = {0x10,0xc2,0x27,0x08,0x00,0x28,0x94,0x00,0x00,0x00,0x00,0xea};
+				msg[11] = crc8_bow(msg,11);
+				return bus_send(bus, msg, 12);
+			}
+			if(_data[4] == 0x08){//Request for Time/TotalDist
+				uint8_t msg[12] = {0x10,0xc2,0x27,0x08,0x00,0x08,0x8e,0x00,0x00,0x00,0x00,0x7e};
+				msg[11] = crc8_bow(msg,11);
+				return bus_send(bus, msg, 12);
+			}
+			uint8_t msg[7] = {0x10, 0xc2, 0x22, 0x01, 0x02, 0x02, 0x03};
+			return bus_send(bus, msg, 7);
+		}else if ((cmd == 0x08) && (data_len == 0x03)){//IDK?
+			if(_data[4] == 0x48){
+				uint8_t msg[17] = {0x10,0xc2,0x2c,0x08,0x00,0x48,0x99,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+					msg[5] = 0x48;	//??
+					msg[6] = 0x99;	//??
+					msg[7]	= 0x02; // ???
+					msg[8]	= 0x00;		//1 Triptime MSB
+					msg[9]	= 0x00;		//1 Triptime
+					msg[10] = 0x00;		//1 Triptime
+					msg[11] = 0x00;		//1 Triptime LSB 0:04 max? 
+					msg[12] = 0x00;		//2 Triptime MSB
+					msg[13] = 0x00;		//2 triptime
+					msg[14] = 0x00;		//2 Triptime 0x01 = 0:04 increment
+					msg[15] = 0x00;		//2 triptime LSB 0:04 max? 
+					msg[16] = crc8_bow(msg, 16);
+				return bus_send(bus, msg, 17);	
+			}
+			if(_data[4] == 0x44){
+				uint8_t msg[13] = {0x10,0xc2,0x28,0x08,0x00,0x44,0x9a,0x02,0x00,0x00,0x00,0x00,0x0b};
+					msg[7] = 0x00;//??
+					msg[8] = 0x00;//??
+					msg[9] = 0x00;//??
+					msg[10] = 0x00;//??
+					msg[11] = 0x00;//??
+					msg[12] = crc8_bow(msg,12);
+				return bus_send(bus, msg, 13);	
+			}
+		}else if ((cmd == 0x08) && (data_len == 0x04)){//IDK???
+			uint8_t msg[14] = {0x10,0xc2,0x29,0x08,0x00,0x94,0x18,0x00,0x00,0x14,0x1a,0x2a,0xf8,0x64};
+				msg[13] = crc8_bow(msg,13);
+			return bus_send(bus, msg, 14);
 		}
+		
 	}else if ((from == ADDR_MOTOR) && (to == ADDR_BATTERY)){
 		//Declare it online
 		motor.online = true;
@@ -458,6 +527,30 @@ void bus_display_poll(bowbus_net_s* bus){
 		display.poll_cnt = 0;
 	}
 	//Sent the message.
+	bus_send(bus,msg,6);
+}
+
+//Send a poll command to display, to receive the state of the buttons.
+//Still haven't figured out how this fully works, But display starts talking... A lot... but also power lvl changes and requests other stuff.
+void bus_cu3_display_poll(bowbus_net_s* bus){
+	uint8_t msg[3];
+	msg[0] = 0x10;
+	msg[1] = 0xc0;
+	msg[2] = 0xe1;
+	//Send the message.
+	bus_send(bus,msg,3);
+}
+
+// Send error code to CU3 display.. Maybe useful. idk.
+void bus_cu3_send_status(bowbus_net_s* bus, uint8_t statusCode){
+	uint8_t msg[6];
+	msg[0] = FRAME_HEADER;
+	msg[1] = ADDR_DISPLAY | 0x01;
+	msg[2] = ADDR_BATTERY | 0x01;
+	msg[3] = 0x17; //Status/error CMD?
+	msg[4] = statusCode;
+	msg[5] = crc8_bow(msg, 5);
+	//Send the message.
 	bus_send(bus,msg,6);
 }
 
@@ -823,6 +916,9 @@ bool bus_display_update(bowbus_net_s* bus){
 	return bus_send(bus,msg,14);
 }
 
+/*
+	Does what the function name says...
+*/
 bool bus_cu3_display_update(bowbus_net_s* bus){
 	//Three local variables for the different items on screen, they might get different data values based on menu.
 	int32_t distance = display.distance;
@@ -835,36 +931,39 @@ bool bus_cu3_display_update(bowbus_net_s* bus){
 	uint8_t msg[18];
 	msg[0] = FRAME_HEADER;
 	msg[1] = ADDR_DISPLAY | 0x01;	 //Dunno what the one's for.
-	msg[2] = ADDR_BATTERY | 0x0D;	 //I guess that goes there.
+	msg[2] = ADDR_BATTERY | 0x0D;	 //I guess that goes there (Data length?).
 	msg[3] = 0x28;					 // CMD, 0x28 cause idk?
 	msg[4] = 0x00;					 // Charge state, >0 = busy display
-	msg[5] = motor.mode;			 // Peddal assist mode (0(0), 1(1), 2(2), 3(3), 7(4)  4(P),5(R))
+	if(motor.mode > 3){				// Peddal assist mode (0(0), 1(1), 2(2), 3(3), 7(4)  4(P),5(R))
+		if(motor.mode == 4){msg[5] = 0x07;}
+		else if(motor.mode == 5){msg[5] = 0x04;}
+		else if(motor.mode == 6){msg[5] = 0x05;}
+	}else{msg[5] = motor.mode;}			
 	
-	msg[6] = 0x0A;					 // ?? 0x0A works. Sometimes 0x0B sniffed, Maybe something with lights
-	msg[7] = (motor.speed>>8) & 0xFF;// MSB of speedometer
-	msg[8] = motor.speed & 0xFF;	 // LSB of speedometer
+	if(display.backlight == 1){msg[6] = 0x0B;} // ?? 0x0A Backlight off, 0x0B = Backlight on, 0x0C = Range extender?
+	else{msg[6] = 0x0A;	}
+					 
+	
+	msg[7] = (display.speed>>8) & 0xFF;// MSB of speedometer
+	msg[8] = display.speed & 0xFF;	 // LSB of speedometer
 	
 	msg[9] = 0x00;							//MSB Trip 1
 	msg[10] = 0x00;							// Trip dist 1
+//	msg[11] = (display.strain_th>>8) & 0xFF;  // Test Value
+//	msg[12] = display.strain_th & 0xFF;		// Test Value
 	msg[11] = (display.voltage>>8) & 0xFF;  // Trip dist 1
 	msg[12] = display.voltage & 0xFF;		// LSB Trip 1
 	
 	msg[13] = 0x00;							// MSB Trip 2
 	msg[14] = 0x00;							// Trip dist 2
+//	msg[15] = (display.value1>>8) & 0xFF;  // Test Value
+//	msg[16] = display.value1 & 0xFF;		// Test Value
 	msg[15] = (display.current>>8) & 0xFF;  // Trip dist 2
 	msg[16] = display.current & 0xFF;		// LSB Trip 2
 	
 	//Computer the CRC:
 	uint8_t crc = crc8_bow(msg,17);
 	msg[17] = crc;
-
-	//Break the Speed into powers of 10.
-	//dec[0] = (speed / 100);
-	//dec[1] = (speed - (100*dec[0])) / 10;
-	//dec[2] = speed % 10;
-	//msg[10] = 0xf0 | (dec[0]);
-	//msg[11] = ((0x10 * dec[1])) | dec[2];
-	//msg[12] = ((0x10 * dec[3])) | dec[4];
 
 	//Send it out.
 	return bus_send(bus,msg,18);

@@ -1375,7 +1375,9 @@ int main(void){
 				//Increase offline count.
 				display.offline_cnt++;
 				if (display.offline_cnt > 10){
-					uart_rate_find();
+					#if(DISPLAY_VER != HW_DISP_CU3)
+						uart_rate_find();				// Has to be either improved, or crystal used (Added in Rev2.1).
+					#endif
 					PORTC.OUTSET = PIN6_bm;
 				}else{
 					PORTC.OUTCLR = PIN6_bm;
@@ -1395,15 +1397,15 @@ int main(void){
 					strain_cnt = 0;
 					motor.mode = 0;
 				}
-
+				
 				poll_cnt++;
 				if (poll_cnt == 2){
-					#if (OPT_DISPLAY== FW_DISPLAY_MASTER)
-					bus_display_poll(&bus);
+					#if (OPT_DISPLAY== FW_DISPLAY_MASTER && DISPLAY_VER != HW_DISP_CU3)
+						bus_display_poll(&bus);	
 					#endif
 				}else if (poll_cnt == 4){
 					//Update the display, and it's variables:
-
+					
 					commtime_sum = 0;
 					commtime_cnt = 0 ;
 
@@ -1446,8 +1448,17 @@ int main(void){
 
 
 					//ad_strain_av = meas_cnt;
-					ad_strain_sum = 0;
+					ad_strain_sum = 0;				
 
+					// Strain Calibration for CU3 Display
+					if(display.calibrate == 1){
+						strain_threshhold = ad_strain_av;
+						display.strain_th = strain_threshhold;
+						eepsettings.straincal = strain_threshhold;
+						eemem_write_block(EEMEM_MAGIC_HEADER_SETTINGS,(uint8_t*)&eepsettings, sizeof(eepsettings), EEBLOCK_SETTINGS1);
+						display.calibrate=0;
+					}	
+	
 					//Strain calibration in Menu F8/F3:
 					if ((display.func == 8) && (display.menu_downcnt > 100)){
 						strain_threshhold = 200;
@@ -1530,25 +1541,25 @@ int main(void){
 
 					poll_cnt = 0;
 					#if(OPT_DISPLAY == FW_DISPLAY_MASTER)
+					
+						//Goto mode 0:
+						if (status){
+							motor.mode = 0;
+						}
 
-					//Goto mode 0:
-					if (status){
-						motor.mode = 0;
-					}
-
-					#if(DISPLAY_VER == HW_DISP_CU3)
-						bus_cu3_display_update(&bus);
-					#else
-						bus_display_update(&bus);
-					#endif
-					#endif
+						#if(DISPLAY_VER != HW_DISP_CU3) // Lowered Update rate of CU3 display to improve bus stability
+							bus_display_update(&bus);
+						#endif
 					//motor.mode = 1;
+					#endif
 				}
 			}
 		}
-
-		//cnt_tm is incremented from software TCC1 counts. This should happen ~ each 220 ms.
-		if (cnt_tm > 15){
+		//cnt_tm  is incremented from software TCC1 counts. This should happen ~ each 220 ms at cnt_tm = 15.
+		if(cnt_tm  == 5){motor.mode_needs_update = true; display.value5++; if(display.value5 == 0xff){display.value5 =0;}} //Allow power level change, and test stuff.
+		if (cnt_tm > 30){ // increased to 30, to slow display update rate down. Maybe not the best way. but meh.
+			bus_cu3_display_update(&bus);
+			
 			cnt_tm = 0;
 
 			if (strain_min < ad_strain_av){

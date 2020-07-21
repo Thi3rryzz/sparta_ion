@@ -172,6 +172,8 @@ struct display_state_s{
 	int16_t current;
 	int16_t strain;			//Strain value
 	int16_t strain_th;		//Strain threshold.
+	bool	calibrate;		// Used for CU3 calibration procedure
+	uint8_t	backlight;		// Backlight function
 
 	uint8_t func;
 
@@ -182,6 +184,7 @@ struct display_state_s{
 	uint8_t soc;		//What value should be in the soc bar
 	uint8_t throttle;	//Throttle value in percent.
 	uint32_t error;		//Error value that it displayed when not 0.
+
 
 	//Bunch of test values.
 	uint16_t value1;
@@ -207,12 +210,13 @@ void bus_tick(bowbus_net_s* bus);
 void bus_send_battery_ack(bowbus_net_s* bus,uint8_t cmd);
 
 void bus_display_poll(bowbus_net_s* bus);
+void bus_cu3_display_poll(bowbus_net_s* bus);
 void bus_display_tick(bowbus_net_s* bus);
 void bus_display_buttonpress(bowbus_net_s* bus);
 bool bus_display_update(bowbus_net_s* bus);
 bool bus_cu3_display_update(bowbus_net_s* bus);
 void bus_display_clear_error(bowbus_net_s* bus);
-
+void bus_cu3_send_status(bowbus_net_s* bus, uint8_t statusCode);
 void bus_motor_poll(bowbus_net_s* bus);
 
 

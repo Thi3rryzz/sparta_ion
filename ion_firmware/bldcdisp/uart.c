@@ -35,9 +35,15 @@
 #include "uart.h"
 #include "../../lib_ion/bowbus.h"
 
-//UART rate settings 
-uint8_t bscale = 0;
-uint8_t bsel = 200;
+//UART rate settings
+#if(DISPLAY_VER == HW_DISP_CU3)
+	uint8_t bscale = 0;
+	uint8_t bsel = 103; //b19200
+#else
+	uint8_t bscale = 0;
+	uint8_t bsel = 200; //b9600
+#endif
+
 
 /*
 	Increase the UART rate by a tiny bit.

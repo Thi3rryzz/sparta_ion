@@ -1,6 +1,7 @@
 Open Source Sparta ION
 =============
 There's a bunch of (Dutch) blog posts that go with this: (http://infant.tweakblogs.net/blog/cat/2875) (Awesome work InfantEudora)
+Also check out the Discord: (https://discord.gg/anZees2)
 
 This repository contains the following:
 
@@ -35,9 +36,13 @@ The firware uses one block to read/write settings, which are currently the strai
 If you wan't to build a control PCB, use the latest revision of 3phasecntrl.
 
 New Hardare Revision Wishlist:
+Motor Driver:
  - Modify 3phasecntrl for XHP motors.
- - Create NIMH BMS with BOW bus support.
+BMS:
+ - Modifiy BMS for Li-Ion/Li-Po support.
 
 New Software Revision Wishlist:
- - Support CU3 Display
+ - Enhance CU3 Display support
+ - Write BMS code
+ - Modify Bootloader for BMS
 

@@ -50,7 +50,7 @@ struct termstate_s{
 termstate_s user_input;
 
 //Name of the uart interface we'll use
-char* ifname = "/dev/ttyS41";
+char* ifname = "/dev/ttyS6";
 
 
 #define BOOT_WAIT_REQ	0
@@ -110,19 +110,21 @@ void app_print_info(void){
 
 	printf("start        - Put all devices in bootload mode.\n");
 	printf("startmotor   - Put only the motor in bootload mode. \n");
+	printf("startbms     - Put only the BMS in bootload mode. \n");
 	printf("loadbutton   - Load button PCB. (firmware/button.hex)\n");
-	printf("loadmotor    - Load motor PCB. (firmware/motor.hex)\n");
+	printf("loadmotor    - Load motor PCB. (firmware/bldcdisp.hex)\n");
+	printf("loadbms	     - Load BMS Firmware. (firmware/BMS.hex)\n");
 	printf("motorhex     - Only open the hexfile.\n");
 	printf("info3        - Get bootinfo from button.\n");
 	printf("info4        - Get bootinfo from motor.\n");
 
 	printf("\n");
 	printf("Steps for uploading motor firmware:\n");
-	printf(" 1 - Make sure motor.hex is the correct file that you want to upload.\n");
+	printf(" 1 - Make sure bldcdisp.hex is the correct file that you want to upload.\n");
 	printf(" 2 - Remove power from motor.\n");
 	printf(" 3 - Connect OneWire bus to PC, or whatever this is currently running on.\n");
 	printf(" 4 - type 'startmotor', it will tell the motor to stay in bootload mode.\n");
-	printf(" 5 - type 'loadmotor', it will upload motor.hex to the motor.\n");
+	printf(" 5 - type 'loadmotor', it will upload bldcdisp.hex to the motor.\n");
 	printf(" 6 - ??? \n");
 	printf(" 7 - Profit\n");
 	printf("\n");
@@ -139,11 +141,8 @@ void app_prepare_bootload(uint8_t start_addr){
 	bootstate.address = start_addr;
 
 	bool resp_button = false;
-	if (start_addr == 4){
-		resp_button = true;
-	}
-
 	bool resp_motor = false;
+	bool resp_bms = false;
 
 	while(1){
 		//Read an arbitrary number of bytes
@@ -177,6 +176,10 @@ void app_prepare_bootload(uint8_t start_addr){
 						bootstate.address = 3;
 						debprintf(CLR_CYAN,0,"ACK from MOTOR.\n");
 						resp_motor = true;
+					}else if (info.address == 5){
+						bootstate.address = 5;
+						debprintf(CLR_CYAN,0,"ACK from BMS.\n");
+						resp_bms = true;
 					}
 				}
 			}
@@ -194,10 +197,19 @@ void app_prepare_bootload(uint8_t start_addr){
 		message_append_tofifo(uart->txfifo,NULL,0,CMD_BOOT_INFO,bootstate.address);
 		uart_write_start(uart);
 
-		if (resp_motor && resp_button){
-			debprintf(CLR_GREEN,0,"\nBoth devices are in bootload state.\n");
+		if (resp_button && start_addr == 3){
+			debprintf(CLR_GREEN,0,"\nButton in bootload state.\n");
 			return;
 		}
+		if (resp_motor && start_addr == 4){
+			debprintf(CLR_GREEN,0,"\nMOTOR in bootload state.\n");
+			return;
+		}
+		if (resp_bms && start_addr == 5){
+			debprintf(CLR_GREEN,0,"\nBMS in bootload state.\n");
+			return;
+		}
+
 		select_term();
 	}
 }
@@ -213,17 +225,32 @@ void parse_userinput(uint8_t *buf){
 		return;
 	}else if (strcmp(input,"debug") == 0){
 		return;
-	}else if (strcmp(input,"loadmotor") == 0){
-
-
-
+	}else if (strcmp(input,"loadmotor") == 0 || strcmp(input,"lm")== 0 ){
 		//Opening HEX file
-		if (hexfile_open(&filefw,"firmware/motor.hex")){
+		if (hexfile_open(&filefw,"firmware/bldcdisp.hex")){
 			printf("Opened MOTOR firmware file. Parsing:\n");
 			if (hexfile_process(&filefw)){
 				bootstate.size = filefw.binary_size;
 				bootstate.todo = bootstate.size;
 				bootstate.address = 4;
+				app_load_firmware(bootstate.address);
+			}else{
+				printf("Invalid hex file.\n");
+				return 0;
+			}
+		}else{
+			printf("Unable to find hex file.\n");
+			return;
+		}
+		return;
+	}else if (strcmp(input,"loadbms") == 0 || strcmp(input,"lb")== 0 ){
+		//Opening HEX file
+		if (hexfile_open(&filefw,"firmware/SpartaIonBMS.hex")){
+			printf("Opened BMS firmware file. Parsing:\n");
+			if (hexfile_process(&filefw)){
+				bootstate.size = filefw.binary_size;
+				bootstate.todo = bootstate.size;
+				bootstate.address = 5;
 				app_load_firmware(bootstate.address);
 			}else{
 				printf("Invalid hex file.\n");
@@ -273,8 +300,11 @@ void parse_userinput(uint8_t *buf){
 	}else if (strcmp(input,"start") == 0){
 		app_prepare_bootload(3);
 		return;
-	}else if (strcmp(input,"startmotor") == 0){
+	}else if (strcmp(input,"startmotor") == 0 || strcmp(input,"sm") == 0){
 		app_prepare_bootload(4);
+		return;
+	}else if (strcmp(input,"startbms") == 0 || strcmp(input,"sb") == 0){
+		app_prepare_bootload(5);
 		return;
 	}else if (strcmp(input,"fifo") == 0){
 		fifo_print(&rxfifo);

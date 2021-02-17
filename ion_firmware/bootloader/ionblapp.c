@@ -61,6 +61,7 @@ uint8_t pagebuffer[512];
 
 //Local functions:
 void clock_switch32M(void);
+void clock_switch32MExt(void);
 void bootloader_init(void);
 uint16_t read_app_crc(uint16_t);
 void app_execute_firmware(void);
@@ -79,12 +80,26 @@ void clock_switch32M(void){
 	PORTCFG.CLKEVOUT = (PORTCFG.CLKEVOUT & (~PORTCFG_CLKOUT_gm)) | PORTCFG_CLKOUT_OFF_gc;	// disable peripheral clock
 }
 
+void clock_switch32MExt(void){
+	/*Setup 32MHz clock to run from External 16MHz oscillator.*/
+	OSC.XOSCCTRL |=  OSC_FRQRANGE1_bm | OSC_FRQRANGE0_bm | OSC_XOSCSEL3_bm | OSC_XOSCSEL1_bm | OSC_XOSCSEL0_bm;
+	OSC.PLLCTRL =  OSC_PLLSRC1_bm | OSC_PLLSRC0_bm |OSC_PLLFAC1_bm ;
+	OSC.CTRL |= OSC_XOSCEN_bm;
+	while (!(OSC.STATUS & OSC_XOSCRDY_bm));
+	OSC.CTRL |= OSC_PLLEN_bm;
+	while (!(OSC.STATUS & OSC_PLLRDY_bm));
+	CCP = CCP_IOREG_gc;
+	CLK.CTRL = CLK_SCLKSEL_PLL_gc;
+	OSC.CTRL &= (~OSC_RC2MEN_bm);
+	PORTCFG.CLKEVOUT = (PORTCFG.CLKEVOUT & (~PORTCFG_CLKOUT_gm)) | PORTCFG_CLKOUT_OFF_gc;	// disable peripheral clock
+}
+
 void bootloader_init(void){	
 	//Init IO first:	
 	PORTC.DIRSET = PIN7_bm | PIN6_bm;
 	
-	clock_switch32M();
-	
+	//clock_switch32M();
+	clock_switch32MExt();
 	//Set the interrupts, enable low-prio interrupts.
 	//The IO vector remap bit is protected, allow access for 4 clock cycles.
 	cli();

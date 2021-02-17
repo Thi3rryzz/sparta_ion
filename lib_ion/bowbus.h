@@ -174,6 +174,7 @@ struct display_state_s{
 	int16_t strain_th;		//Strain threshold.
 	bool	calibrate;		// Used for CU3 calibration procedure
 	uint8_t	backlight;		// Backlight function
+	uint8_t chargingState;	// Used for BMS charging state;
 
 	uint8_t func;
 
@@ -190,7 +191,7 @@ struct display_state_s{
 	uint16_t value1;
 	uint16_t value2;
 	uint16_t value3;
-	uint16_t value4;
+	uint32_t value4;
 	uint16_t value5;
 
 	bool needs_update;
@@ -202,6 +203,7 @@ void bus_receive(bowbus_net_s* bus, uint8_t chr);
 bool bus_parse(bowbus_net_s* bus,uint8_t* _data,uint16_t len);
 bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len);
 bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len);
+bool bus_parse_BMS(bowbus_net_s* bus,uint8_t* _data,uint16_t len);
 bool bus_send(bowbus_net_s* bus,uint8_t* data, uint8_t len);
 bool bus_isbusy(bowbus_net_s* bus);
 

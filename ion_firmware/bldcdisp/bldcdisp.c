@@ -59,7 +59,7 @@ bool flagsave = false;			//Set when settings need to be saved
 settings_t eepsettings;			//The settings.
 
 bool usehall = true;
-bool use_throttle = true;		//Apply throttle.
+bool use_throttle = false;		//Apply throttle.
 bool use_pedalassist = true;		//Apply throttle.
 
 bool use_brake = false;			//Apply brake
@@ -148,7 +148,7 @@ int32_t ad_strain_av = 500;		//Center around 500.
 int16_t strain_min = 500;		//Self calibrating...
 int16_t strain_max = 500;
 
-uint8_t strain_gain = 2;		//Gain factor in throttle.
+uint8_t strain_gain = 4;		//Gain factor in throttle.
 
 //If the strain signal registered, how long it should be on for.
 uint16_t strain_cnt = 0;
@@ -220,6 +220,20 @@ bowbus_net_s bus;
 void init(void){
 	PORTD.DIRSET = PIN0_bm;
 	PORTC.DIRSET = PIN3_bm | PIN2_bm | PIN1_bm | PIN0_bm;
+}
+
+void clock_switch32MExt(void){
+	/*Setup 32MHz clock to run from External 16MHz oscillator.*/
+	OSC.XOSCCTRL |=  OSC_FRQRANGE1_bm | OSC_FRQRANGE0_bm | OSC_XOSCSEL3_bm | OSC_XOSCSEL1_bm | OSC_XOSCSEL0_bm;
+	OSC.PLLCTRL =  OSC_PLLSRC1_bm | OSC_PLLSRC0_bm |OSC_PLLFAC1_bm ;
+	OSC.CTRL |= OSC_XOSCEN_bm;
+	while (!(OSC.STATUS & OSC_XOSCRDY_bm));
+	OSC.CTRL |= OSC_PLLEN_bm;
+	while (!(OSC.STATUS & OSC_PLLRDY_bm));
+	CCP = CCP_IOREG_gc;
+	CLK.CTRL = CLK_SCLKSEL_PLL_gc;
+	OSC.CTRL &= (~OSC_RC2MEN_bm);
+	PORTCFG.CLKEVOUT = (PORTCFG.CLKEVOUT & (~PORTCFG_CLKOUT_gm)) | PORTCFG_CLKOUT_OFF_gc;	// disable peripheral clock
 }
 
 void clock_switch32M(void){
@@ -788,8 +802,10 @@ void read_calibration(void){
 */
 int main(void){
 	//Run of the internal 32MHz oscillator.
-	clock_switch32M();
-
+	//clock_switch32M();
+	//Run off the external 16MHz oscillator with 32MHz PLL.
+	clock_switch32MExt();
+	
 	init_pwm();
 	uart_init();
 	bus_init(&bus);
@@ -836,7 +852,7 @@ int main(void){
 	//Apply settings...
 	strain_threshhold = eepsettings.straincal;
 	display.function_val5 = eepsettings.straingain;
-	strain_gain = eepsettings.straingain;
+	//strain_gain = eepsettings.straingain;
 
 	//Startup hall state.
 	hall_state = 0x04;
@@ -1366,8 +1382,10 @@ int main(void){
 			}
 
 			//Send timer tick
-			bus_tick(&bus);
-
+			#if(DISPLAY_VER != HW_DISP_CU3)
+				bus_tick(&bus);
+			#endif
+			
 			if (bus_check_for_message()){
 				green_led_on();
 			}else{
@@ -1399,6 +1417,7 @@ int main(void){
 				}
 				
 				poll_cnt++;
+				motor.mode_needs_update = true;
 				if (poll_cnt == 2){
 					#if (OPT_DISPLAY== FW_DISPLAY_MASTER && DISPLAY_VER != HW_DISP_CU3)
 						bus_display_poll(&bus);	
@@ -1455,6 +1474,7 @@ int main(void){
 						strain_threshhold = ad_strain_av;
 						display.strain_th = strain_threshhold;
 						eepsettings.straincal = strain_threshhold;
+						eepsettings.straingain = strain_gain;
 						eemem_write_block(EEMEM_MAGIC_HEADER_SETTINGS,(uint8_t*)&eepsettings, sizeof(eepsettings), EEBLOCK_SETTINGS1);
 						display.calibrate=0;
 					}	
@@ -1494,7 +1514,7 @@ int main(void){
 					display.value3 = strain_max;// ad_strain_av - 2000;
 
 					//Load the strain gain value:
-					strain_gain = display.function_val5+1;
+					//strain_gain = display.function_val5+1;
 					#endif
 
 					display.value4 = pwm;
@@ -1520,7 +1540,7 @@ int main(void){
 					meas_cnt = 0;
 
 					//Calibration:
-					ad_voltage_av -= 175;
+					ad_voltage_av -= 100;
 					ad_voltage_av *= 1000;
 					ad_voltage_av /= 886;
 
@@ -1556,10 +1576,10 @@ int main(void){
 			}
 		}
 		//cnt_tm  is incremented from software TCC1 counts. This should happen ~ each 220 ms at cnt_tm = 15.
-		if(cnt_tm  == 5){motor.mode_needs_update = true; display.value5++; if(display.value5 == 0xff){display.value5 =0;}} //Allow power level change, and test stuff.
-		if (cnt_tm > 30){ // increased to 30, to slow display update rate down. Maybe not the best way. but meh.
-			bus_cu3_display_update(&bus);
-			
+		if (cnt_tm > 15){ //this should happen ~ each 220 ms.
+			#if(DISPLAY_VER == HW_DISP_CU3)
+				bus_cu3_display_update(&bus);
+			#endif
 			cnt_tm = 0;
 
 			if (strain_min < ad_strain_av){

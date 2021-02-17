@@ -34,9 +34,10 @@
 #define HW_BLDC_REV0		1		//1St BLDC controller with onboard Mosfets, No Display
 #define HW_BLDC_REV1		2		//Seconds BLDC controller with onboard Mosfets, Display
 #define HW_CTRL_REV0		3		//REV1 -> Round board: Control only: talks directly to display.
+#define HW_BMS_REV0			8		//First Revision of NiMH BMS.
 
 //Set this to the version you have.
-#define HARDWARE_VER		HW_CTRL_REV0
+#define HARDWARE_VER		HW_BMS_REV0
 
 #if (HARDWARE_VER == HW_BLDC_REV1)
  //Running as button board.
@@ -45,10 +46,13 @@
 #elif (HARDWARE_VER == HW_CTRL_REV0)
  #define BOOT_ADDRESS	4
  #define DEVICE_ADDRESS	00
+ #elif (HARDWARE_VER == HW_BMS_REV0)
+ #define BOOT_ADDRESS	5
+ #define DEVICE_ADDRESS	00
 #endif
 
 //Define what periphrials this hardware supports.
-#if (HARDWARE_VER == HW_CTRL_REV0)
+#if (HARDWARE_VER == HW_CTRL_REV0 || HARDWARE_VER == HW_BMS_REV0)
 #define HARDWARE_HAS_STRAIN
 #define HARDWARE_HAS_DISPLAY
 #define green_led_on()		PORTC.OUTSET = PIN7_bm;

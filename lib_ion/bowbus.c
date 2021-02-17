@@ -77,6 +77,7 @@ void bus_init(bowbus_net_s* bus){
 	display.menu_timeout = 0 ;
 	display.road_legal = true;
 	display.calibrate = false;
+	display.chargingState = false;
 
 	wait_for_last_char = false;
 	display.function_val2 = 9;
@@ -221,6 +222,64 @@ bool bus_parse_motor(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 
 
 /*
+	Attempt to make sense of the data in the rx buffer if you're a BMS.
+	Little confusing with battery/BMS indeed.
+*/
+bool bus_parse_BMS(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
+	bool displayDataReceived = false;
+	//Do a CRC check:
+	uint8_t crc_calc = crc8_bow(_data,len-1);
+	uint8_t crc_msg = _data[len-1];
+
+	//Match?
+	if (crc_calc != crc_msg){
+		return false;
+	}
+
+	//Message was sent from a device address, to another device address. It works when masked with 0xF0.
+	//Not sure what the lower 4 bits do yet.
+	uint8_t to   = _data[1] & 0xF0;
+	uint8_t from = _data[2] & 0xF0;
+
+	//We'll call this next bit the command. I honestly have no clue, but we can differentiate messages on it.
+	uint8_t cmd;
+	if (len > 3){
+		cmd = _data[3];
+	}else{
+		cmd = 0;
+	}
+
+	//Pretty sure this is the length of the data in the message.
+	uint8_t data_len;
+	if (len > 3){
+		//Packed in from.
+		data_len = _data[2] & 0x0F;
+	}else{
+		data_len = 0;
+	}	
+	
+	//Listen for Display
+	if(from == ADDR_DISPLAY){
+		//Clear the offline count:
+		display.offline_cnt = 0;
+		//Declare it online
+		display.online = true;
+		displayDataReceived = true;
+	}
+	if ((from == ADDR_DISPLAY) && (to == ADDR_BATTERY)){
+		if ((cmd == 0x1c) && (data_len == 0x01)){//Light command received.
+			display.backlight = _data[4];
+		}
+		displayDataReceived = true;
+	}
+	// Lets use this for test dump
+	if ((from == ADDR_0X40) && (to == ADDR_BATTERY)){
+		//Dump Data.
+}
+	return displayDataReceived;
+}
+
+/*
 	Attempt to make sense of the data in the rx buffer if you're a battery.
 */
 bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
@@ -277,71 +336,101 @@ bool bus_parse_battery(bowbus_net_s* bus,uint8_t* _data,uint16_t len){
 		}else if ((cmd == 0x1b) && (data_len == 0x01)){//Strain Calibration command received.
 			display.calibrate = true;
 		}else if ((cmd == 0x1c) && (data_len == 0x01)){//Light command received.
-		display.backlight = _data[4];
+			display.backlight = _data[4];
+			uint8_t msg[5] = {0x10,0xC2,0x20,0x1C,0xEA};
+			msg[4] = crc8_bow(msg,4);
+			return bus_send(bus, msg, 5);
 		}else if ((cmd == 0x1d) && (data_len == 0x01) && motor.mode_needs_update == true){//Receive power level mode change
 			motor.mode_needs_update = false;
-			if(motor.mode >= 3 && motor.mode <= 6){
-				//Increase power level
-				if(_data[4] == 0x03 && motor.mode == 3){motor.mode = 4;}
-				else if(_data[4] == 0x07 && motor.mode == 4){motor.mode = 5;}
-				else if(_data[4] == 0x00 && motor.mode == 5){motor.mode = 6;}
-				else if(_data[4] == 0x04 && motor.mode == 6){motor.mode = 0;} //Exit by top end of menu
-				//Decrease power level
-				else if(_data[4] == 0x05 && motor.mode == 6){motor.mode = 5;}
-				else if(_data[4] == 0x04 && motor.mode == 5){motor.mode = 4;}
-				else if(_data[4] == 0x03 && motor.mode == 4){motor.mode = 3;}
-				else if(_data[4] == 0x02 && motor.mode == 3){motor.mode = 2;}
-			}else{motor.mode = _data[4];}
-		}else if ((cmd == 0x01) && (data_len == 0x00)){//IDK???
+			motor.mode = _data[4];
+		}else if ((cmd == 0x14) && (data_len == 0x00)){ //??
+			uint8_t msg[5] = {0x10, 0xc2, 0x20, 0x14, 0x2d};
+			msg[4] = crc8_bow(msg,4);
+			return bus_send(bus, msg, 5);
+		}else if ((cmd == 0x01) && (data_len == 0x00)){//???
 			uint8_t msg[7] = {0x10, 0xc2, 0x22, 0x01, 0x02, 0x02, 0x03};
+			msg[6] = crc8_bow(msg,6);
 			return bus_send(bus, msg, 7);
-		}else if ((cmd == 0x08) && (data_len == 0x02)){//Request for Time/TotalDist
-			// Total Dist/Time
-			if(_data[4] == 0x28){
-				uint8_t msg[12] = {0x10,0xc2,0x27,0x08,0x00,0x28,0x94,0x00,0x00,0x00,0x00,0xea};
-				msg[11] = crc8_bow(msg,11);
-				return bus_send(bus, msg, 12);
-			}
-			if(_data[4] == 0x08){//Request for Time/TotalDist
+		}else if ((cmd == 0x08) && (data_len == 0x02)){
+			if(_data[4] == 0x08 && _data[5] == 0x8e){//Request for Time
 				uint8_t msg[12] = {0x10,0xc2,0x27,0x08,0x00,0x08,0x8e,0x00,0x00,0x00,0x00,0x7e};
+				uint32_t timeTest = 43920; // Test variable in seconds
+				msg[7] = (timeTest & 0xFF000000) >> 24;
+				msg[8] = (timeTest & 0xFF0000) >> 16;
+				msg[9] = (timeTest & 0xFF00) >> 8;
+				msg[10] = (timeTest & 0xFF);
 				msg[11] = crc8_bow(msg,11);
 				return bus_send(bus, msg, 12);
 			}
-			uint8_t msg[7] = {0x10, 0xc2, 0x22, 0x01, 0x02, 0x02, 0x03};
-			return bus_send(bus, msg, 7);
-		}else if ((cmd == 0x08) && (data_len == 0x03)){//IDK?
+			if(_data[4] == 0x08 && _data[5] == 0x80){//Request for Total Distance CU3
+				uint8_t msg[12] = {0x10,0xc2,0x27,0x08,0x00,0x08,0x80,0x00,0x03,0xA1,0xEB,0x16};
+				uint32_t kmTest = 1337; // Test variable interger
+				msg[7] = (kmTest*100 & 0xFF000000) >> 24;
+				msg[8] = (kmTest*100 & 0xFF0000) >> 16;
+				msg[9] = (kmTest*100 & 0xFF00) >> 8;
+				msg[10] = (kmTest*100 & 0xFF);
+				msg[11] = crc8_bow(msg,11);
+				return bus_send(bus, msg, 12);
+			}
+			if(_data[4] == 0x28){//?? Range? msg_7 = 0x01 = 999KM range
+				uint8_t msg[12] = {0x10,0xC2,0x27,0x08,0x00,0x28,0x94,0x00,0x00,0x00,0x00,0xEA};
+				msg[7] = 0x02;
+				msg[8] = 0x00;
+				msg[9] = 0x00;
+				msg[10] = 0x00; 
+				msg[11] = crc8_bow(msg,11);
+				return bus_send(bus, msg, 12);
+			}
+			if(_data[4] == 0x14){//Battery Percentage CU3
+				uint8_t percentage = 33;
+				uint16_t data = (percentage*100)+1000;
+				uint8_t msg[10] = {0x10,0xC2,0x25,0x08,0x00,0x14,0x18,0x00,0x00,0xEA};
+				msg[7] = (data & 0xFF00) >> 8;
+				msg[8] = data & 0xFF;
+				msg[9] = crc8_bow(msg,9);
+				return bus_send(bus, msg, 10);
+			}
+		}else if ((cmd == 0x08) && (data_len == 0x03)){
 			if(_data[4] == 0x48){
 				uint8_t msg[17] = {0x10,0xc2,0x2c,0x08,0x00,0x48,0x99,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-					msg[5] = 0x48;	//??
-					msg[6] = 0x99;	//??
 					msg[7]	= 0x02; // ???
-					msg[8]	= 0x00;		//1 Triptime MSB
-					msg[9]	= 0x00;		//1 Triptime
-					msg[10] = 0x00;		//1 Triptime
-					msg[11] = 0x00;		//1 Triptime LSB 0:04 max? 
-					msg[12] = 0x00;		//2 Triptime MSB
-					msg[13] = 0x00;		//2 triptime
-					msg[14] = 0x00;		//2 Triptime 0x01 = 0:04 increment
-					msg[15] = 0x00;		//2 triptime LSB 0:04 max? 
+					uint32_t tripTime1 = 49020; // Trip Time 1 in seconds
+					uint32_t tripTime2 = 84180; // Trip Time 1 in seconds
+					msg[8] = (tripTime1 & 0xFF000000) >> 24;
+					msg[9] = (tripTime1 & 0xFF0000) >> 16;
+					msg[10] = (tripTime1 & 0xFF00) >> 8;
+					msg[11] = (tripTime1 & 0xFF);
+					msg[12] = (tripTime2 & 0xFF000000) >> 24;
+					msg[13] = (tripTime2 & 0xFF0000) >> 16;
+					msg[14] = (tripTime2 & 0xFF00) >> 8;
+					msg[15] = (tripTime2 & 0xFF);
 					msg[16] = crc8_bow(msg, 16);
 				return bus_send(bus, msg, 17);	
 			}
-			if(_data[4] == 0x44){
+			if(_data[4] == 0x44){ // Max Speed CU3 (AVG_speed is internally calculated on CU3)
 				uint8_t msg[13] = {0x10,0xc2,0x28,0x08,0x00,0x44,0x9a,0x02,0x00,0x00,0x00,0x00,0x0b};
-					msg[7] = 0x00;//??
-					msg[8] = 0x00;//??
-					msg[9] = 0x00;//??
-					msg[10] = 0x00;//??
-					msg[11] = 0x00;//??
+					uint16_t maxSpeed1 = 23;
+					uint16_t maxSpeed2 = 48;
+					msg[7] = 0x02;//?
+					msg[8] = ((maxSpeed1 * 10) & 0xFF00) >> 8;
+					msg[9] = (maxSpeed1 * 10) & 0xFF;
+					msg[10] = ((maxSpeed2 * 10) & 0xFF00) >> 8;
+					msg[11] = (maxSpeed2 * 10) & 0xFF;
 					msg[12] = crc8_bow(msg,12);
 				return bus_send(bus, msg, 13);	
 			}
-		}else if ((cmd == 0x08) && (data_len == 0x04)){//IDK???
+		}else if ((cmd == 0x08) && (data_len == 0x04)){//??
 			uint8_t msg[14] = {0x10,0xc2,0x29,0x08,0x00,0x94,0x18,0x00,0x00,0x14,0x1a,0x2a,0xf8,0x64};
+				msg[7] = 0x00;
+				msg[8] = 0x00;
+				msg[9] = 0x14;
+				msg[10] = 0x00;
+				msg[11] = 0x00;
+				msg[12] = 0x00;
 				msg[13] = crc8_bow(msg,13);
 			return bus_send(bus, msg, 14);
 		}
-		
+
 	}else if ((from == ADDR_MOTOR) && (to == ADDR_BATTERY)){
 		//Declare it online
 		motor.online = true;
@@ -921,28 +1010,20 @@ bool bus_display_update(bowbus_net_s* bus){
 */
 bool bus_cu3_display_update(bowbus_net_s* bus){
 	//Three local variables for the different items on screen, they might get different data values based on menu.
-	int32_t distance = display.distance;
-	uint16_t speed = display.speed;
-	uint8_t soc = display.throttle;
 
-	//Decimal numbers
-	uint8_t dec[5] = {0};
 	//Bus message
 	uint8_t msg[18];
 	msg[0] = FRAME_HEADER;
 	msg[1] = ADDR_DISPLAY | 0x01;	 //Dunno what the one's for.
 	msg[2] = ADDR_BATTERY | 0x0D;	 //I guess that goes there (Data length?).
 	msg[3] = 0x28;					 // CMD, 0x28 cause idk?
-	msg[4] = 0x00;					 // Charge state, >0 = busy display
-	if(motor.mode > 3){				// Peddal assist mode (0(0), 1(1), 2(2), 3(3), 7(4)  4(P),5(R))
-		if(motor.mode == 4){msg[5] = 0x07;}
-		else if(motor.mode == 5){msg[5] = 0x04;}
-		else if(motor.mode == 6){msg[5] = 0x05;}
-	}else{msg[5] = motor.mode;}			
+	msg[4] = display.chargingState;	 // Charge state, >0 = busy display
+	msg[5] = motor.mode;		     // Peddal assist mode (0(0), 1(1), 2(2), 3(3), 7(4)  4(P),5(R))
+	
 	
 	if(display.backlight == 1){msg[6] = 0x0B;} // ?? 0x0A Backlight off, 0x0B = Backlight on, 0x0C = Range extender?
 	else{msg[6] = 0x0A;	}
-					 
+				 	
 	
 	msg[7] = (display.speed>>8) & 0xFF;// MSB of speedometer
 	msg[8] = display.speed & 0xFF;	 // LSB of speedometer
